@@ -113,7 +113,7 @@ namespace MiniGate
                     }
 
                     if ((indata[NumCalls * 7] == 0x03) && (indata[(NumCalls * 7) + 1] == 0xF0))     // Don't bother going on if this isn't a UI packet
-                    {
+                    {                                                                               // We'd check this sooner, but need to know where these bytes are in the packet first
                         if (NumCalls > 2)
                         {
                             Via = ",";
@@ -121,7 +121,7 @@ namespace MiniGate
                             {
                                 string Callsign = new String(UTF8Encoding.UTF8.GetChars(Callsigns[i]));
                                 Via = Via + Callsign.Trim();
-                                if (SSIDs[i] != 0x00) Via = Via + "-" + SSIDs[i].ToString();
+                                if (SSIDs[i] != 0x00) Via = Via + "-" + SSIDs[i].ToString();    // Only add the SSID if it's not zero
                                 if (HBit[i]) Via = Via + "*";   // Add a "*" if this digi slot has been used
                                 if ((i + 1) < NumCalls) Via = Via + ",";    // Add a "," if there are more digi's in the list
                             }
@@ -144,7 +144,18 @@ namespace MiniGate
     {
         public static void StartServer()
         {
-            
+            Socket telnetSock = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+            telnetSock.Bind(new IPEndPoint(IPAddress.Any, 23));
+            telnetSock.Listen(1);
+
+            while (true)
+            {
+                using (Socket telnetConn = telnetSock.Accept())
+                {
+                    byte[] senddata = UTF8Encoding.UTF8.GetBytes("\nMiniGate Console\n\n1) Configuration\n2) Monitor RF Port\n\nEnter an option: ");
+                    telnetConn.Send(senddata, SocketFlags.None);
+                }
+            }
         }
     }
 }
