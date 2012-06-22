@@ -22,12 +22,15 @@ namespace MiniGate
         
         public static void Main()
         {
+            Thread ledControl = new Thread(new ThreadStart(LEDControl.BlinkLED));
+            ledControl.Start();
             NetworkInterface[] eth = NetworkInterface.GetAllNetworkInterfaces();
             Debug.Print("IP: " + eth[0].IPAddress);
             modem.DataReceived += new SerialDataReceivedEventHandler(modem_DataReceived); // Handler for incoming serial data
             modem.Open();
             Thread telnet = new Thread(new ThreadStart(TelnetServer.StartServer));
             telnet.Start();
+            LEDControl.error = false;   // TODO: Only clear the error condition after connecting to APRS-IS, etc.
             Thread.Sleep(Timeout.Infinite);
         }
 
@@ -140,6 +143,37 @@ namespace MiniGate
         }
     }
 
+    public class LEDControl
+    {
+        public static bool error = true;
+
+        public static void BlinkLED()
+        {
+            OutputPort led = new OutputPort(Pins.ONBOARD_LED, false);
+            while (true)
+            {
+                led.Write(true);
+                if (error)
+                {
+                    Thread.Sleep(250);
+                }
+                else
+                {
+                    Thread.Sleep(1500);
+                }
+                led.Write(false);
+                if (error)
+                {
+                    Thread.Sleep(250);
+                }
+                else
+                {
+                    Thread.Sleep(1500);
+                }
+            }
+        }
+    }
+
     public class TelnetServer
     {
         public static void StartServer()
@@ -152,10 +186,30 @@ namespace MiniGate
             {
                 using (Socket telnetConn = telnetSock.Accept())
                 {
-                    byte[] senddata = UTF8Encoding.UTF8.GetBytes("\nMiniGate Console\n\n1) Configuration\n2) Monitor RF Port\n\nEnter an option: ");
-                    telnetConn.Send(senddata, SocketFlags.None);
+                    while (!(telnetConn.Available == 0 && telnetConn.Poll(1, SelectMode.SelectRead)))
+                    {
+                        SendData(telnetConn, "\nMiniGate Console\n\n 1) RF Port Config\n 2) Digipeater Config\n 3) Network Config\n 4) Monitor RF Port\n\nEnter an option: ");
+                        string RXData = GetInput(telnetConn);
+                        // TODO: Finish telnet interface
+                    }
                 }
             }
+        }
+
+        static string GetInput(Socket telnetConn)
+        {
+            byte[] RXData = new byte[telnetConn.Available];
+            telnetConn.Receive(RXData);
+            telnetConn.Poll(-1, SelectMode.SelectRead);
+            RXData = new byte[telnetConn.Available];
+            telnetConn.Receive(RXData);
+            return new String(Encoding.UTF8.GetChars(RXData));
+        }
+
+        static void SendData(Socket telnetConn, string TXData)
+        {
+            byte[] senddata = UTF8Encoding.UTF8.GetBytes(TXData);
+            telnetConn.Send(senddata, SocketFlags.None);
         }
     }
 }
