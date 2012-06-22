@@ -13,25 +13,34 @@ using SecretLabs.NETMF.Hardware.NetduinoPlus;
 
 namespace MiniGate
 {
-    public class Program
+    public class Init
     {
-        static SerialPort modem = new SerialPort("COM2", 9600, Parity.None, 8, StopBits.One);
-        static int bytes = 0;
-        static byte[] indata = new byte[1024];
-        static bool esc = false;
         
         public static void Main()
         {
             Thread ledControl = new Thread(new ThreadStart(LEDControl.BlinkLED));
             ledControl.Start();
+            PacketEngine.OpenPort();
             NetworkInterface[] eth = NetworkInterface.GetAllNetworkInterfaces();
             Debug.Print("IP: " + eth[0].IPAddress);
-            modem.DataReceived += new SerialDataReceivedEventHandler(modem_DataReceived); // Handler for incoming serial data
-            modem.Open();
             Thread telnet = new Thread(new ThreadStart(TelnetServer.StartServer));
             telnet.Start();
             LEDControl.error = false;   // TODO: Only clear the error condition after connecting to APRS-IS, etc.
             Thread.Sleep(Timeout.Infinite);
+        }
+    }
+
+    public class PacketEngine
+    {
+        static SerialPort modem = new SerialPort("COM2", 9600, Parity.None, 8, StopBits.One);
+        static int bytes = 0;
+        static byte[] indata = new byte[1024];
+        static bool esc = false;
+
+        public static void OpenPort()
+        {
+            modem.DataReceived += new SerialDataReceivedEventHandler(modem_DataReceived); // Handler for incoming serial data
+            modem.Open();
         }
 
         private static void modem_DataReceived(object sender, SerialDataReceivedEventArgs e)
@@ -131,10 +140,13 @@ namespace MiniGate
                         }
                         string Source = new String(UTF8Encoding.UTF8.GetChars(Callsigns[1]));
                         Source = Source.Trim();
+                        if (SSIDs[1] != 0x00) Source = Source + "-" + SSIDs[1].ToString();
                         string Dest = new String(UTF8Encoding.UTF8.GetChars(Callsigns[0]));
                         Dest = Dest.Trim();
+                        if (SSIDs[0] != 0x00) Dest = Dest + "-" + SSIDs[0].ToString();
                         string Payload = new String(UTF8Encoding.UTF8.GetChars(Utility.ExtractRangeFromArray(indata, (NumCalls * 7) + 2, bytes - (NumCalls * 7) - 4)));
                         Debug.Print(Source + ">" + Dest + Via + ":" + Payload);
+                        if (TelnetServer.RFMonEnable) TelnetServer.SendData(Source + ">" + Dest + Via + ":" + Payload + "\n\r");
                     }
                 }
             }
@@ -155,7 +167,7 @@ namespace MiniGate
                 led.Write(true);
                 if (error)
                 {
-                    Thread.Sleep(250);
+                    Thread.Sleep(100);
                 }
                 else
                 {
@@ -164,7 +176,7 @@ namespace MiniGate
                 led.Write(false);
                 if (error)
                 {
-                    Thread.Sleep(250);
+                    Thread.Sleep(100);
                 }
                 else
                 {
@@ -176,6 +188,9 @@ namespace MiniGate
 
     public class TelnetServer
     {
+        public static Socket telnetConn = null;
+        public static bool RFMonEnable = false;
+
         public static void StartServer()
         {
             Socket telnetSock = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
@@ -184,32 +199,83 @@ namespace MiniGate
 
             while (true)
             {
-                using (Socket telnetConn = telnetSock.Accept())
-                {
-                    while (!(telnetConn.Available == 0 && telnetConn.Poll(1, SelectMode.SelectRead)))
-                    {
-                        SendData(telnetConn, "\nMiniGate Console\n\n 1) RF Port Config\n 2) Digipeater Config\n 3) Network Config\n 4) Monitor RF Port\n\nEnter an option: ");
-                        string RXData = GetInput(telnetConn);
-                        // TODO: Finish telnet interface
-                    }
-                }
+                telnetConn = telnetSock.Accept();
+                ConfigMenu();
+                telnetConn.Close();
+                RFMonEnable = false;
             }
         }
 
-        static string GetInput(Socket telnetConn)
+        static string GetInput()
         {
             byte[] RXData = new byte[telnetConn.Available];
             telnetConn.Receive(RXData);
             telnetConn.Poll(-1, SelectMode.SelectRead);
             RXData = new byte[telnetConn.Available];
             telnetConn.Receive(RXData);
-            return new String(Encoding.UTF8.GetChars(RXData));
+            try
+            {
+                return new String(Encoding.UTF8.GetChars(RXData)).Trim();       // TODO: Replace ugly hack with real input validation
+            }
+            catch
+            {
+                return null;
+            }
         }
 
-        static void SendData(Socket telnetConn, string TXData)
+        static void ConfigMenu()
+        {
+            while (true)
+            {
+                SendData("\n\rMiniGate Console\n\n\r 1) RF Port Config\n\r 2) Digipeater Config\n\r 3) Network Config\n\r 4) Monitor RF Port\n\r 5) Disconnect\n\n\rEnter an option: ");
+                switch (GetInput())
+                {
+                    case "1":
+                        RFConfig();
+                        break;
+                    case "2":
+                        DigiConfig();
+                        break;
+                    case "3":
+                        NetworkConfig();
+                        break;
+                    case "4":
+                        MonitorRF();
+                        break;
+                    case "5":
+                        return;
+                    default:
+                        break;
+                }
+            }
+        }
+
+        public static void SendData(string TXData)
         {
             byte[] senddata = UTF8Encoding.UTF8.GetBytes(TXData);
             telnetConn.Send(senddata, SocketFlags.None);
+        }
+
+        static void RFConfig()
+        {
+        }
+
+        static void DigiConfig()
+        {
+        }
+
+        static void NetworkConfig()
+        {
+        }
+
+        static void MonitorRF()
+        {
+            SendData("\n\rEntering monitor mode. Type \"q <enter>\" to exit.\n\n\r");
+            RFMonEnable = true;
+            while (!(GetInput() == "q"))
+            {
+            }
+            RFMonEnable = false;
         }
     }
 }
