@@ -45,5 +45,6 @@
     <Reference Include="SecretLabs.NETMF.Hardware" />
     <Reference Include="SecretLabs.NETMF.Hardware.NetduinoPlus" />
     <Reference Include="System" />
+    <Reference Include="System.IO" />
   </ItemGroup>
 </Project>

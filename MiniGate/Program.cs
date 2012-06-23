@@ -13,24 +13,65 @@ using SecretLabs.NETMF.Hardware.NetduinoPlus;
 
 namespace MiniGate
 {
-    public class Init
+    public class Main
     {
-        
+        public static string Callsign;
+        public static string SSID;
+
         public static void Main()
         {
-            Thread ledControl = new Thread(new ThreadStart(LEDControl.BlinkLED));
+            Thread ledControl = new Thread(new ThreadStart(LEDControl.Main));
             ledControl.Start();
-            PacketEngine.OpenPort();
+            Config.Init();
+            Callsign = Config.Read("stn.callsign");
+            SSID = Config.Read("stn.ssid");
+            Packet.OpenPort();
             NetworkInterface[] eth = NetworkInterface.GetAllNetworkInterfaces();
-            Debug.Print("IP: " + eth[0].IPAddress);
-            Thread telnet = new Thread(new ThreadStart(TelnetServer.StartServer));
+            Debug.Print("IP: " + eth[0].IPAddress);     // TODO: Remove for final version
+            Thread telnet = new Thread(new ThreadStart(TelnetServer.Main));
             telnet.Start();
-            LEDControl.error = false;   // TODO: Only clear the error condition after connecting to APRS-IS, etc.
             Thread.Sleep(Timeout.Infinite);
+            LEDControl.errors--;    // Clear the boot error
         }
     }
 
-    public class PacketEngine
+    public class Config
+    {
+        static DirectoryInfo ConfigFolder = new DirectoryInfo(@"\SD\MiniGate\Config\");
+
+        public static void Init()
+        {
+            LEDControl.errors++;
+            while (!ConfigFolder.Exists)
+            {
+                try
+                {
+                    ConfigFolder.Create();
+                }
+                catch
+                {
+                    Thread.Sleep(1000);
+                }
+            }
+            LEDControl.errors--;
+        }
+
+        public static string Read(string file)
+        {
+            if (!ConfigFolder.Exists) Init();
+            FileInfo ConfigFile = new FileInfo(@"\SD\MiniGate\Config\" + file);
+            if (ConfigFile.Exists) return new String(Encoding.UTF8.GetChars(File.ReadAllBytes(@"\SD\MiniGate\Config\" + file)));
+            return null;
+        }
+
+        public static void Write(string file, string val)
+        {
+            if (!ConfigFolder.Exists) Init();
+            File.WriteAllBytes(@"\SD\MiniGate\Config\" + file, Encoding.UTF8.GetBytes(val));
+        }
+    }
+
+    public class Packet
     {
         static SerialPort modem = new SerialPort("COM2", 9600, Parity.None, 8, StopBits.One);
         static int bytes = 0;
@@ -55,7 +96,7 @@ namespace MiniGate
                     esc = false;
                     if (inbyte[0] == 0x7E)     // If this was an escaped flag byte
                     {
-                        parsepacket();
+                        Parse();
                     }
                     else
                     {
@@ -76,7 +117,7 @@ namespace MiniGate
             }
         }
 
-        private static void parsepacket()   // Where most of the packet decoding magic happens
+        private static void Parse()   // Where most of the packet decoding magic happens
         {
             if (bytes > 17)    // If the packet is less than 18 bytes, it's obviously broken, so don't even bother.
             {
@@ -157,41 +198,29 @@ namespace MiniGate
 
     public class LEDControl
     {
-        public static bool error = true;
+        public static int errors = 1;     // Start with one "error" to show booting
 
-        public static void BlinkLED()
+        public static void Main()
         {
             OutputPort led = new OutputPort(Pins.ONBOARD_LED, false);
             while (true)
             {
                 led.Write(true);
-                if (error)
-                {
-                    Thread.Sleep(100);
-                }
-                else
-                {
-                    Thread.Sleep(1500);
-                }
+                if (errors == 0) Thread.Sleep(1400);
+                Thread.Sleep(100);
                 led.Write(false);
-                if (error)
-                {
-                    Thread.Sleep(100);
-                }
-                else
-                {
-                    Thread.Sleep(1500);
-                }
+                if (errors == 0) Thread.Sleep(1400);
+                Thread.Sleep(100);
             }
         }
     }
 
     public class TelnetServer
     {
-        public static Socket telnetConn = null;
+        public static Socket Connection = null;
         public static bool RFMonEnable = false;
 
-        public static void StartServer()
+        public static void Main()
         {
             Socket telnetSock = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
             telnetSock.Bind(new IPEndPoint(IPAddress.Any, 23));
@@ -199,20 +228,20 @@ namespace MiniGate
 
             while (true)
             {
-                telnetConn = telnetSock.Accept();
+                Connection = telnetSock.Accept();
                 ConfigMenu();
-                telnetConn.Close();
+                Connection.Close();
                 RFMonEnable = false;
             }
         }
 
         static string GetInput()
         {
-            byte[] RXData = new byte[telnetConn.Available];
-            telnetConn.Receive(RXData);
-            telnetConn.Poll(-1, SelectMode.SelectRead);
-            RXData = new byte[telnetConn.Available];
-            telnetConn.Receive(RXData);
+            byte[] RXData = new byte[Connection.Available];
+            Connection.Receive(RXData);
+            Connection.Poll(-1, SelectMode.SelectRead);
+            RXData = new byte[Connection.Available];
+            Connection.Receive(RXData);
             try
             {
                 return new String(Encoding.UTF8.GetChars(RXData)).Trim();       // TODO: Replace ugly hack with real input validation
@@ -253,7 +282,7 @@ namespace MiniGate
         public static void SendData(string TXData)
         {
             byte[] senddata = UTF8Encoding.UTF8.GetBytes(TXData);
-            telnetConn.Send(senddata, SocketFlags.None);
+            Connection.Send(senddata, SocketFlags.None);
         }
 
         static void RFConfig()
@@ -270,12 +299,41 @@ namespace MiniGate
 
         static void MonitorRF()
         {
-            SendData("\n\rEntering monitor mode. Type \"q <enter>\" to exit.\n\n\r");
+            SendData("\n\rEntering monitor mode. Press <enter> to exit.\n\n\r");
             RFMonEnable = true;
-            while (!(GetInput() == "q"))
-            {
-            }
+            GetInput();
             RFMonEnable = false;
+        }
+    }
+
+    public class APRSIS
+    {
+        public static Socket Connection = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+        public static bool IsConnected = false;
+        static string Server;
+        static int Port;
+
+        public static void Main()
+        {
+            Server = Config.Read("aprsis.server");
+            Port = int.Parse(Config.Read("aprsis.port"));
+
+            while (true)
+            {
+                LEDControl.errors++;
+                EndPoint APRSISServer = new IPEndPoint(Dns.GetHostEntry(Server).AddressList[0], Port);
+                try
+                {
+                    Connection.Connect(APRSISServer);
+                    IsConnected = true;
+                    LEDControl.errors--;
+                }
+                catch
+                {
+                    Thread.Sleep(10000);
+                }
+                // TODO: APRS-IS Client code goes here.
+            }
         }
     }
 }
