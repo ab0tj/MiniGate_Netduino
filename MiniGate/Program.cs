@@ -13,7 +13,7 @@ using SecretLabs.NETMF.Hardware.NetduinoPlus;
 
 namespace MiniGate
 {
-    public class Main
+    public class MiniGate
     {
         public static string Callsign;
         public static string SSID;
@@ -61,7 +61,7 @@ namespace MiniGate
             if (!ConfigFolder.Exists) Init();
             FileInfo ConfigFile = new FileInfo(@"\SD\MiniGate\Config\" + file);
             if (ConfigFile.Exists) return new String(Encoding.UTF8.GetChars(File.ReadAllBytes(@"\SD\MiniGate\Config\" + file)));
-            return null;
+            return "";
         }
 
         public static void Write(string file, string val)
@@ -219,9 +219,11 @@ namespace MiniGate
     {
         public static Socket Connection = null;
         public static bool RFMonEnable = false;
+        static string Pass;
 
         public static void Main()
         {
+            Pass = Config.Read("telnet.pass");
             Socket telnetSock = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
             telnetSock.Bind(new IPEndPoint(IPAddress.Any, 23));
             telnetSock.Listen(1);
@@ -229,51 +231,75 @@ namespace MiniGate
             while (true)
             {
                 Connection = telnetSock.Accept();
-                ConfigMenu();
+                SendData("Password: ");
+                if (GetInput() == Pass) ConfigPrompt();
                 Connection.Close();
                 RFMonEnable = false;
             }
         }
 
+        static bool IsConnected()
+        {
+            return !(Connection.Poll(1000, SelectMode.SelectRead) && (Connection.Available == 0));
+        }
+
         static string GetInput()
         {
-            byte[] RXData = new byte[Connection.Available];
-            Connection.Receive(RXData);
-            Connection.Poll(-1, SelectMode.SelectRead);
-            RXData = new byte[Connection.Available];
-            Connection.Receive(RXData);
+            if (!IsConnected()) return "";
             try
             {
+                byte[] RXData = new byte[Connection.Available];
+                Connection.Receive(RXData);
+                Connection.Poll(-1, SelectMode.SelectRead);
+                RXData = new byte[Connection.Available];
+                Connection.Receive(RXData);
                 return new String(Encoding.UTF8.GetChars(RXData)).Trim();       // TODO: Replace ugly hack with real input validation
             }
             catch
             {
-                return null;
+                return "";
             }
         }
 
-        static void ConfigMenu()
+        static void ConfigPrompt()
         {
-            while (true)
+            SendData("\n\rMiniGate Console\n\n\r");
+            while (IsConnected())
             {
-                SendData("\n\rMiniGate Console\n\n\r 1) RF Port Config\n\r 2) Digipeater Config\n\r 3) Network Config\n\r 4) Monitor RF Port\n\r 5) Disconnect\n\n\rEnter an option: ");
-                switch (GetInput())
+                SendData("cmd: ");
+                string[] InCmd = GetInput().Split(' ');
+                switch (InCmd.Length)
                 {
-                    case "1":
-                        RFConfig();
+                    case 1:     // No parameter commands
+                        switch (InCmd[0].ToUpper())
+                        {
+                            case "QUIT":
+                            case "EXIT":
+                                break;
+                            case "DISP":
+                                // Display code goes here
+                            default:
+                                SendData("?\n\r");
+                                break;
+                        }
                         break;
-                    case "2":
-                        DigiConfig();
+                    case 2:     // One parameter commands
+                        switch (InCmd[0].ToUpper())
+                        {
+                            case "MONI":
+                            case "MONITOR":
+                                RFMon(InCmd[1].ToUpper());
+                                break;
+                            case "MYCALL":
+                                ChangeCall(InCmd[1].ToUpper());
+                                break;
+                            default:
+                                SendData("?\n\r");
+                                break;
+                        }
                         break;
-                    case "3":
-                        NetworkConfig();
-                        break;
-                    case "4":
-                        MonitorRF();
-                        break;
-                    case "5":
-                        return;
                     default:
+                        SendData("?\n\r");
                         break;
                 }
             }
@@ -281,28 +307,30 @@ namespace MiniGate
 
         public static void SendData(string TXData)
         {
+            if (!IsConnected()) return;
             byte[] senddata = UTF8Encoding.UTF8.GetBytes(TXData);
             Connection.Send(senddata, SocketFlags.None);
         }
 
-        static void RFConfig()
+        public static void RFMon(string param)
         {
+            switch (param)
+            {
+                case "ON":
+                    RFMonEnable = true;
+                    break;
+                case "OFF":
+                    RFMonEnable = false;
+                    break;
+                default:
+                    SendData("?\n\r");
+                    break;
+            }
         }
 
-        static void DigiConfig()
+        public static void ChangeCall(string newcall)
         {
-        }
-
-        static void NetworkConfig()
-        {
-        }
-
-        static void MonitorRF()
-        {
-            SendData("\n\rEntering monitor mode. Press <enter> to exit.\n\n\r");
-            RFMonEnable = true;
-            GetInput();
-            RFMonEnable = false;
+            
         }
     }
 
