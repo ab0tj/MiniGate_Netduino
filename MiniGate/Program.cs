@@ -16,7 +16,7 @@ namespace MiniGate
     public class MiniGate
     {
         public static string Callsign;
-        public static string SSID;
+        public static int SSID = 0;
 
         public static void Main()
         {
@@ -24,7 +24,11 @@ namespace MiniGate
             ledControl.Start();
             Config.Init();
             Callsign = Config.Read("stn.callsign");
-            SSID = Config.Read("stn.ssid");
+            try
+            {
+                SSID = int.Parse(Config.Read("stn.ssid"));
+            }
+            catch { }
             Packet.OpenPort();
             NetworkInterface[] eth = NetworkInterface.GetAllNetworkInterfaces();
             Debug.Print("IP: " + eth[0].IPAddress);     // TODO: Remove for final version
@@ -267,37 +271,69 @@ namespace MiniGate
             while (IsConnected())
             {
                 SendData("cmd: ");
-                string[] InCmd = GetInput().Split(' ');
-                switch (InCmd.Length)
+                string InFull = GetInput();
+                string[] InCmd = InFull.Split(' ');
+                switch (InCmd[0].ToUpper())
                 {
-                    case 1:     // No parameter commands
-                        switch (InCmd[0].ToUpper())
+                    case "QUIT":
+                    case "EXIT":
+                        return;
+                    case "DISP":
+                        // Display code goes here
+                        break;
+                    case "MON":
+                    case "MONITOR":
+                        if (InCmd.Length == 2)
                         {
-                            case "QUIT":
-                            case "EXIT":
-                                break;
-                            case "DISP":
-                                // Display code goes here
-                            default:
-                                SendData("?\n\r");
-                                break;
+                            RFMon(InCmd[1].ToUpper());
+                        }
+                        else
+                        {
+                            SendData("?\n\r");
                         }
                         break;
-                    case 2:     // One parameter commands
-                        switch (InCmd[0].ToUpper())
+                    case "MYCALL":
+                        if (InCmd.Length > 1)
                         {
-                            case "MONI":
-                            case "MONITOR":
-                                RFMon(InCmd[1].ToUpper());
-                                break;
-                            case "MYCALL":
-                                ChangeCall(InCmd[1].ToUpper());
-                                break;
-                            default:
-                                SendData("?\n\r");
-                                break;
+                            ChangeCall(InCmd[1]);
+                            break;
+                        }
+                        string mycall = MiniGate.Callsign;
+                        if (MiniGate.SSID != 0) mycall += "-" + MiniGate.SSID;
+                        SendData(mycall + "\n\r");
+                        break;
+                    case "APRSSRV":
+                        if (InCmd.Length > 1)
+                        {
+                            ChangeAPRSSrv(InCmd[1]);
+                            break;
+                        }
+                        SendData(APRSIS.Server + ":" + APRSIS.Port + "\n\r");
+                        break;
+                    case "DHCP":
+
+                    case "MYIP":
+                    case "DNSSRV":
+                    case "TXDELAY":
+                        
+                    case "PASSWD":
+                        if (InCmd.Length > 1)
+                        {
+                            Config.Write("telnet.pass", InFull.Substring(InCmd[0].Length + 1));
+                            TelnetServer.Pass = InFull.Substring(InCmd[0].Length + 1);
+                            break;
+                        }
+                        SendData("?\n\r");
+                        break;
+                    case "BTEXT":
+                        if (InCmd.Length > 1)
+                        {
+                            Config.Write("stn.btext", InFull.Substring(InCmd[0].Length + 1));
+                            // TODO: set btext var here
+                            break;
                         }
                         break;
+                    case "PATH":
                     default:
                         SendData("?\n\r");
                         break;
@@ -330,7 +366,48 @@ namespace MiniGate
 
         public static void ChangeCall(string newcall)
         {
-            
+            string[] split = newcall.Split('-');
+            int ssid = 0;
+            if (split[0].Length > 6)
+            {
+                SendData("Callsign must be 6 characters or less.\n\r");
+                return;
+            }
+            try
+            {
+                ssid = int.Parse(split[1]);
+            }
+            catch { }
+            if (ssid > 15)
+            {
+                SendData("SSID must be between 0 and 15.\n\r");
+                return;
+            }
+            Config.Write("stn.callsign", split[0].ToUpper());
+            MiniGate.Callsign = split[0].ToUpper();
+            Config.Write("stn.ssid", ssid.ToString());
+            MiniGate.SSID = ssid;
+        }
+
+        public static void ChangeAPRSSrv(string srv)
+        {
+            string[] split = srv.Split(':');
+            int port = 14580;
+            try
+            {
+                port = int.Parse(split[1]);
+            }
+            catch { }
+            if (port > 65535)
+            {
+                SendData("Port must be between 0 and 65535.\n\r");
+                return;
+            }
+            Config.Write("aprsis.server", split[0]);
+            APRSIS.Server = split[0];
+            Config.Write("aprsis.port", port.ToString());
+            APRSIS.Port = port;
+            APRSIS.Connection.Close();
         }
     }
 
@@ -338,8 +415,8 @@ namespace MiniGate
     {
         public static Socket Connection = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
         public static bool IsConnected = false;
-        static string Server;
-        static int Port;
+        public static string Server;
+        public static int Port;
 
         public static void Main()
         {
