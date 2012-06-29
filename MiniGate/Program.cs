@@ -199,8 +199,18 @@ namespace MiniGate
                         string Dest = new String(UTF8Encoding.UTF8.GetChars(Callsigns[0]));
                         Dest = Dest.Trim();
                         if (SSIDs[0] != 0x00) Dest = Dest + "-" + SSIDs[0].ToString();
-                        string Payload = new String(UTF8Encoding.UTF8.GetChars(Utility.ExtractRangeFromArray(indata, (NumCalls * 7) + 2, bytes - (NumCalls * 7) - 4)));
-                        // Debug.Print(Source + ">" + Dest + Via + ":" + Payload);
+                        string Payload = string.Empty;      // (only necessary because of try/catch block below)
+                        try
+                        {
+                            Payload = new String(UTF8Encoding.UTF8.GetChars(indata, (NumCalls * 7) + 2, bytes - (NumCalls * 7) - 4));
+                        }
+                        catch 
+                        {
+                            Debug.Print("Failed to decode packet payload into string!");
+                            Array.Clear(indata, 0, bytes + 1);          // TODO: Find out why the line above throws exceptions somtimes
+                            bytes = 0;
+                            return;
+                        }
                         if (Via.IndexOf("TCPIP") == -1 && Via.IndexOf("TCPXX") == -1) APRSIS.SendData(Source + ">" + Dest + Via + ",qAR," + MiniGate.FullCall + ":" + Payload + "\r\n");
                         if (TelnetServer.RFMonEnable) TelnetServer.SendData(Source + ">" + Dest + Via + ":" + Payload + "\r\n");
                     }
@@ -511,7 +521,6 @@ namespace MiniGate
                     {
                         EndPoint APRSISServer = new IPEndPoint(Dns.GetHostEntry(Server).AddressList[0], Port);
                         Connection = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-                        Connection.SendTimeout = 1000;
                         Connection.Connect(APRSISServer);
                         Debug.Print("Connected!");
                         Thread.Sleep(1000);
@@ -554,9 +563,9 @@ namespace MiniGate
             {
                 return !(Connection.Poll(100, SelectMode.SelectRead) && (Connection.Available == 0));
             }
-            catch
+            catch (SocketException e)
             {
-                Debug.Print("Exception @ IsConnected()");
+                Debug.Print("Exception @ IsConnected(): " + e.ErrorCode);
                 return false;
             }
         }
@@ -579,10 +588,8 @@ namespace MiniGate
                 Thread.Sleep(1000);
                 return "";
             }
-            //try
-            //{
-                //byte[] RXData = new byte[Connection.Available];
-                //Connection.Receive(RXData);
+            try
+            {
                 Connection.Poll(-1, SelectMode.SelectRead);
                 byte[] RXData = new byte[Connection.Available];
                 Connection.Receive(RXData);
@@ -590,12 +597,12 @@ namespace MiniGate
                 KeepAlive = 0;      // Clear KeepAlive watchdog
                 return new String(Encoding.UTF8.GetChars(RXData)).Trim();       // TODO: Replace ugly hack with real input validation
                 
-            //}
-            //catch
-            //{
-            //    Debug.Print("Exception @ GetInput()");
-            //    return "";
-            //}
+            }
+            catch (SocketException e)
+            {
+                Debug.Print("Exception @ GetInput(): " + e.ErrorCode);
+                return "";
+            }
         }
     }
 

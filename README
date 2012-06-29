@@ -1,11 +1,16 @@
 MiniGate
 
-An APRS iGate and digipeater for the Netduino Plus. Built with low power and small size as a goal. Designed for use with a SmartModem "shield". See https://github.com/ab0tj/SmartModem
+An APRS IGate and digipeater for the Netduino Plus. Built with low power and small size as a goal. Designed for use with a SmartModem "shield". See https://github.com/ab0tj/SmartModem
 
-Currently under construction. Planned features include:
+Currently implemented features (still under construction!):
 
-- Bidirectional iGate
+- RX-Only IGate
+- Telnet TNC-style configuration interface
+
+Planned features include:
+
+- Bidirectional IGate
 - Digipeating with WIDEN-n support
-- Telnet or web configuration interface
+- Fancy HTTP configuration interface
 
-This software is free and open source, released under the GPLv3 license. See the file LICENSE for more information.
+This software is a free and open source community project, released under the GPLv3 license. See the file LICENSE for more information.
