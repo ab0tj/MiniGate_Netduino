@@ -523,6 +523,7 @@ namespace MiniGate
                     }
                     catch
                     {
+                        Debug.Print("Exception @ Making connection");
                         Thread.Sleep(10000);
                     }
                     while (IsConnected())
@@ -542,7 +543,7 @@ namespace MiniGate
             {
                 Thread.Sleep(1000);
             }
-            Debug.Print("KeepAlive quitting!");
+            Debug.Print("KeepAlive quitting! Val=" + KeepAlive.ToString());
             Connection.Close();
         }
 
@@ -553,9 +554,9 @@ namespace MiniGate
             {
                 return !(Connection.Poll(100, SelectMode.SelectRead) && (Connection.Available == 0));
             }
-            catch (SocketException e)
+            catch
             {
-                Debug.Print(e.ErrorCode + ":" + e.Message);
+                Debug.Print("Exception @ IsConnected()");
                 return false;
             }
         }
@@ -568,7 +569,7 @@ namespace MiniGate
             {
                 Connection.Send(UTF8Encoding.UTF8.GetBytes(TXData), SocketFlags.None);
             }
-            catch { }
+            catch { Debug.Print("Exception @ SendData()"); }
         }
 
         static string GetInput()
@@ -578,21 +579,23 @@ namespace MiniGate
                 Thread.Sleep(1000);
                 return "";
             }
-            try
-            {
-                byte[] RXData = new byte[Connection.Available];
-                Connection.Receive(RXData);
+            //try
+            //{
+                //byte[] RXData = new byte[Connection.Available];
+                //Connection.Receive(RXData);
                 Connection.Poll(-1, SelectMode.SelectRead);
-                RXData = new byte[Connection.Available];
+                byte[] RXData = new byte[Connection.Available];
                 Connection.Receive(RXData);
                 Debug.Print("IN: " + new String(Encoding.UTF8.GetChars(RXData)).Trim());    // TODO: Remove after testing
                 KeepAlive = 0;      // Clear KeepAlive watchdog
                 return new String(Encoding.UTF8.GetChars(RXData)).Trim();       // TODO: Replace ugly hack with real input validation
-            }
-            catch
-            {
-                return "";
-            }
+                
+            //}
+            //catch
+            //{
+            //    Debug.Print("Exception @ GetInput()");
+            //    return "";
+            //}
         }
     }
 
