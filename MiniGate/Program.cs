@@ -74,14 +74,14 @@ namespace MiniGate
         {
             if (!ConfigFolder.Exists) Init();
             FileInfo ConfigFile = new FileInfo(@"\SD\MiniGate\Config\" + file);
-            if (ConfigFile.Exists) return new String(Encoding.UTF8.GetChars(File.ReadAllBytes(@"\SD\MiniGate\Config\" + file)));
+            if (ConfigFile.Exists) return new String(Toolbox.Bytes2Chars(File.ReadAllBytes(@"\SD\MiniGate\Config\" + file)));
             return "";
         }
 
         public static void Write(string file, string val)
         {
             if (!ConfigFolder.Exists) Init();
-            File.WriteAllBytes(@"\SD\MiniGate\Config\" + file, Encoding.UTF8.GetBytes(val));
+            File.WriteAllBytes(@"\SD\MiniGate\Config\" + file, Toolbox.Chars2Bytes(val.ToCharArray()));
         }
     }
 
@@ -186,31 +186,20 @@ namespace MiniGate
                             Via = ",";
                             for (int i = 2; i < NumCalls; i++)
                             {
-                                string Callsign = new String(UTF8Encoding.UTF8.GetChars(Callsigns[i]));
+                                string Callsign = new String(Toolbox.Bytes2Chars(Callsigns[i]));
                                 Via = Via + Callsign.Trim();
                                 if (SSIDs[i] != 0x00) Via = Via + "-" + SSIDs[i].ToString();    // Only add the SSID if it's not zero
                                 if (HBit[i]) Via = Via + "*";   // Add a "*" if this digi slot has been used
                                 if ((i + 1) < NumCalls) Via = Via + ",";    // Add a "," if there are more digi's in the list
                             }
                         }
-                        string Source = new String(UTF8Encoding.UTF8.GetChars(Callsigns[1]));
+                        string Source = new String(Toolbox.Bytes2Chars(Callsigns[1]));
                         Source = Source.Trim();
                         if (SSIDs[1] != 0x00) Source = Source + "-" + SSIDs[1].ToString();
-                        string Dest = new String(UTF8Encoding.UTF8.GetChars(Callsigns[0]));
+                        string Dest = new String(Toolbox.Bytes2Chars(Callsigns[0]));
                         Dest = Dest.Trim();
                         if (SSIDs[0] != 0x00) Dest = Dest + "-" + SSIDs[0].ToString();
-                        string Payload = string.Empty;      // (only necessary because of try/catch block below)
-                        try
-                        {
-                            Payload = new String(UTF8Encoding.UTF8.GetChars(indata, (NumCalls * 7) + 2, bytes - (NumCalls * 7) - 4));
-                        }
-                        catch 
-                        {
-                            Debug.Print("Failed to decode packet payload into string!");
-                            Array.Clear(indata, 0, bytes + 1);          // TODO: Find out why the line above throws exceptions somtimes
-                            bytes = 0;
-                            return;
-                        }
+                        string Payload = new String(Toolbox.Bytes2Chars(Utility.ExtractRangeFromArray(indata, (NumCalls * 7) + 2, bytes - (NumCalls * 7) - 4)));
                         if (Via.IndexOf("TCPIP") == -1 && Via.IndexOf("TCPXX") == -1) APRSIS.SendData(Source + ">" + Dest + Via + ",qAR," + MiniGate.FullCall + ":" + Payload + "\r\n");
                         if (TelnetServer.RFMonEnable) TelnetServer.SendData(Source + ">" + Dest + Via + ":" + Payload + "\r\n");
                     }
@@ -242,9 +231,17 @@ namespace MiniGate
 
     public class TelnetServer
     {
+        private const byte IAC = 255;   // Interpret as Command 
+        private const byte WILL = 251;
+        private const byte WONT = 252;
+        private const byte DO = 253;
+        private const byte DONT = 254;
+        private const byte ECHO = 1;
+        private const byte SUPPRESSGOAHEAD = 3;
+
         public static Socket Connection = null;
-        public static bool RFMonEnable = false;
-        static string Pass;
+        public static bool RFMonEnable = false;     // Should we send received packets to the telnet server?
+        static string Pass;                         // Telnet password, yeah it's stored in cleartext. MD5SUM would be better.
 
         public static void Main()
         {
@@ -259,6 +256,8 @@ namespace MiniGate
                 {
                     using (Connection = telnetSock.Accept())
                     {
+                        Connection.Send(new byte[] { IAC, DONT, ECHO });
+                        Connection.Send(new byte[] { IAC, WILL, ECHO });
                         SendData("Password: ");
                         if (GetInput() == Pass) ConfigPrompt();
                         Connection.Close();
@@ -287,28 +286,51 @@ namespace MiniGate
         static string GetInput()
         {
             if (!IsConnected()) return "";
+            bool quit;
             try
             {
-                byte[] RXData = new byte[Connection.Available];
-                Connection.Receive(RXData);
-                Connection.Poll(-1, SelectMode.SelectRead);
-                RXData = new byte[Connection.Available];
-                Connection.Receive(RXData);
-                return new String(Encoding.UTF8.GetChars(RXData)).Trim();       // TODO: Replace ugly hack with real input validation
+                //byte[] RXData = new byte[Connection.Available];
+                //Connection.Receive(RXData);
+                while (true)
+                {
+                    quit = true;
+                    Connection.Poll(-1, SelectMode.SelectRead);
+                    byte[] RXData = new byte[Connection.Available];
+                    Connection.Receive(RXData);
+                    for (int i = 0; i < RXData.Length; ++i)     // I stole this part from the NETMF Toolbox Telnet Server
+                    {
+                        if (RXData[i] == IAC)
+                        {
+                            byte Command = RXData[++i];
+                            // Lets only support DO, DONT, WILL and WONT for now
+                            if (Command == DO || Command == DONT)  // || Command == WILL || Command == WONT)
+                            {
+                                // Lets see what the other party wants to tell us
+                                byte Option = RXData[++i];
+                                if (Option != ECHO) Connection.Send(new byte[] { IAC, WONT, Option });
+                            }
+                            quit = false;
+                        }
+                    }
+                    if (quit) return new String(Toolbox.Bytes2Chars(RXData)).Trim();       // TODO: Replace ugly hack with real input validation
+                }
             }
             catch
             {
-                return "";
+                return null;
             }
         }
 
         static void ConfigPrompt()
         {
+            Connection.Send(new byte[] { IAC, DO, ECHO });
+            Connection.Send(new byte[] { IAC, WONT, ECHO });
             SendData("\r\nMiniGate Console\n\r\n");
             while (IsConnected())
             {
                 SendData("cmd: ");
                 string InFull = GetInput();
+                if (InFull == null) break;
                 string[] InCmd = InFull.Split(' ');
                 switch (InCmd[0].ToUpper())
                 {
@@ -422,7 +444,7 @@ namespace MiniGate
             if (!IsConnected()) return;
             try
             {
-                Connection.Send(UTF8Encoding.UTF8.GetBytes(TXData), SocketFlags.None);
+                Connection.Send(Toolbox.Chars2Bytes(TXData.ToCharArray()), SocketFlags.None);
             }
             catch { }
         }
@@ -516,31 +538,31 @@ namespace MiniGate
                 using (Connection)
                 {
                     string InData;
-                    LEDControl.errors++;
+                    LEDControl.errors++;    // Set an error (not connected to server)
                     try
                     {
                         EndPoint APRSISServer = new IPEndPoint(Dns.GetHostEntry(Server).AddressList[0], Port);
                         Connection = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
                         Connection.Connect(APRSISServer);
-                        Debug.Print("Connected!");
-                        Thread.Sleep(1000);
+                        if (IsConnected()) Debug.Print("Connected!");
+                        Thread.Sleep(500);
                         SendData("user " + MiniGate.FullCall + " pass " + Pass + " vers MiniGate " + MiniGate.MiniGateVer + "\r\n");
                         Thread keepalive = new Thread(new ThreadStart(Monitor));
                         keepalive.Start();
+                        Thread.Sleep(500);
                         Beacon.SendISBeacon();
-                        LEDControl.errors--;
+                        LEDControl.errors--;    // Clear the error we set earlier
                     }
                     catch
                     {
                         Debug.Print("Exception @ Making connection");
-                        Thread.Sleep(10000);
+                        Thread.Sleep(10000);    // Don't get caught in a tight loop if we can't connect
                     }
                     while (IsConnected())
                     {
                         InData = GetInput();
                     }
                     Debug.Print("Socket died!");
-                    //PowerState.RebootDevice(true);
                 }
             }
         }
@@ -563,9 +585,9 @@ namespace MiniGate
             {
                 return !(Connection.Poll(100, SelectMode.SelectRead) && (Connection.Available == 0));
             }
-            catch (SocketException e)
+            catch
             {
-                Debug.Print("Exception @ IsConnected(): " + e.ErrorCode);
+                Debug.Print("Exception @ IsConnected()");
                 return false;
             }
         }
@@ -576,7 +598,7 @@ namespace MiniGate
             Debug.Print("OUT: " + TXData.Trim());      // TODO: Remove after testing
             try
             {
-                Connection.Send(UTF8Encoding.UTF8.GetBytes(TXData), SocketFlags.None);
+                Connection.Send(Toolbox.Chars2Bytes(TXData.ToCharArray()), SocketFlags.None);
             }
             catch { Debug.Print("Exception @ SendData()"); }
         }
@@ -590,13 +612,12 @@ namespace MiniGate
             }
             try
             {
-                Connection.Poll(-1, SelectMode.SelectRead);
+                Connection.Poll(-1, SelectMode.SelectRead);     // Wait until there's data to read
                 byte[] RXData = new byte[Connection.Available];
                 Connection.Receive(RXData);
-                Debug.Print("IN: " + new String(Encoding.UTF8.GetChars(RXData)).Trim());    // TODO: Remove after testing
+                Debug.Print("IN: " + new String(Toolbox.Bytes2Chars(RXData)).Trim());    // TODO: Remove after testing
                 KeepAlive = 0;      // Clear KeepAlive watchdog
-                return new String(Encoding.UTF8.GetChars(RXData)).Trim();       // TODO: Replace ugly hack with real input validation
-                
+                return new String(Toolbox.Bytes2Chars(RXData)).Trim();       // TODO: Replace try/catch with real input validation
             }
             catch (SocketException e)
             {
@@ -632,6 +653,25 @@ namespace MiniGate
         public static void SendISBeacon()
         {
             APRSIS.SendData(MiniGate.FullCall + ">" + MiniGate.MiniGateDest + ",TCPIP*:" + BText + "\r\n");
+        }
+    }
+
+    public class Toolbox
+    {
+        public static char[] Bytes2Chars(byte[] Input)      // NETMF doesn't have Encoding.ASCII so this will do
+        {
+            char[] Output = new char[Input.Length];
+            for (int Counter = 0; Counter < Input.Length; ++Counter)
+                Output[Counter] = (char)Input[Counter];
+            return Output;
+        }
+
+        public static byte[] Chars2Bytes(char[] Input)      // Encoding.UTF8 throws exceptions on ASCII codes above 128 anyway.
+        {
+            byte[] Output = new byte[Input.Length];
+            for (int Counter = 0; Counter < Input.Length; ++Counter)
+                Output[Counter] = (byte)Input[Counter];
+            return Output;
         }
     }
 }
