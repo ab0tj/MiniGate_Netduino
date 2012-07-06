@@ -27,6 +27,7 @@ namespace MiniGate
             Thread ledControl = new Thread(new ThreadStart(LEDControl.Main));
             ledControl.Start();
             Config.Init();
+            Packet.GetConfig();
             Callsign = Config.Read("stn.callsign");
             FullCall = Callsign;
             try
@@ -89,6 +90,7 @@ namespace MiniGate
     {
         static SerialPort modem = new SerialPort("COM2", 9600, Parity.None, 8, StopBits.One);
         static int bytes = 0;
+        public static int TXDelay = 20;
         static byte[] indata = new byte[1024];
         static bool esc = false;
 
@@ -96,6 +98,15 @@ namespace MiniGate
         {
             modem.DataReceived += new SerialDataReceivedEventHandler(modem_DataReceived); // Handler for incoming serial data
             modem.Open();
+        }
+
+        public static void GetConfig()
+        {
+            try
+            {
+                TXDelay = int.Parse(Config.Read("stn.txdelay"));
+            }
+            catch { }
         }
 
         private static void modem_DataReceived(object sender, SerialDataReceivedEventArgs e)
@@ -238,6 +249,8 @@ namespace MiniGate
         private const byte DONT = 254;
         private const byte ECHO = 1;
         private const byte SUPPRESSGOAHEAD = 3;
+        private const byte CR = 13;
+        private const byte LF = 10;
 
         public static Socket Connection = null;
         public static bool RFMonEnable = false;     // Should we send received packets to the telnet server?
@@ -257,17 +270,15 @@ namespace MiniGate
                     using (Connection = telnetSock.Accept())
                     {
                         Connection.Send(new byte[] { IAC, DONT, ECHO });
-                        Connection.Send(new byte[] { IAC, WILL, ECHO });
+                        Connection.Send(new byte[] { IAC, WILL, ECHO });    // Turn off client echo for the password
                         SendData("Password: ");
                         if (GetInput() == Pass) ConfigPrompt();
-                        Connection.Close();
+                        Connection.Close();     // When ConfigPrompt returns, either the user quit or the connection died.
                     }
                 }
                 catch
-                {
-                    Thread.Sleep(1000);
-                }
-                RFMonEnable = false;
+                { }
+                RFMonEnable = false;    // Turn off monitoring just in case the user enabled it
             }
         }
 
@@ -275,62 +286,60 @@ namespace MiniGate
         {
             try
             {
-                return !(Connection.Poll(1000, SelectMode.SelectRead) && (Connection.Available == 0));
+                return !(Connection.Poll(1000, SelectMode.SelectRead) && (Connection.Available == 0));      // Found this one on the Netduino forums.
             }
             catch
             {
-                return false;
+                return false;       // If that didn't work, socket must be dead
             }
         }
 
         static string GetInput()
         {
-            if (!IsConnected()) return "";
+            if (!IsConnected()) return string.Empty;
             bool quit;
             try
             {
-                //byte[] RXData = new byte[Connection.Available];
-                //Connection.Receive(RXData);
                 while (true)
                 {
                     quit = true;
-                    Connection.Poll(-1, SelectMode.SelectRead);
+                    Connection.Poll(-1, SelectMode.SelectRead);     // Wait until data is available on the socket
                     byte[] RXData = new byte[Connection.Available];
                     Connection.Receive(RXData);
-                    for (int i = 0; i < RXData.Length; ++i)     // I stole this part from the NETMF Toolbox Telnet Server
+                    if (RXData[0] == CR && RXData[1] == LF) quit = false;   // Ignore CRLF Sequence
+                    for (int i = 0; i < RXData.Length; ++i)     // I stole some of this part from the NETMF Toolbox Telnet Server
                     {
-                        if (RXData[i] == IAC)
+                        if (RXData[i] == IAC)       // Check for Telnet commands
                         {
                             byte Command = RXData[++i];
-                            // Lets only support DO, DONT, WILL and WONT for now
+                            // Lets only support DO, DONT for now
                             if (Command == DO || Command == DONT)  // || Command == WILL || Command == WONT)
                             {
                                 // Lets see what the other party wants to tell us
                                 byte Option = RXData[++i];
-                                if (Option != ECHO) Connection.Send(new byte[] { IAC, WONT, Option });
+                                if (Option != ECHO) Connection.Send(new byte[] { IAC, WONT, Option });  // We don't want to do much except control echoing
                             }
-                            quit = false;
+                            quit = false;   // We don't want to return yet
                         }
                     }
-                    if (quit) return new String(Toolbox.Bytes2Chars(RXData)).Trim();       // TODO: Replace ugly hack with real input validation
+                    if (quit) return new String(Toolbox.Bytes2Chars(RXData)).Trim();       // TODO: Should probably have some more input validation
                 }
             }
             catch
             {
-                return null;
+                return string.Empty;        // Returning null borks other stuff
             }
         }
 
         static void ConfigPrompt()
         {
             Connection.Send(new byte[] { IAC, DO, ECHO });
-            Connection.Send(new byte[] { IAC, WONT, ECHO });
+            Connection.Send(new byte[] { IAC, WONT, ECHO });    // Turn client echo on
             SendData("\r\nMiniGate Console\n\r\n");
             while (IsConnected())
             {
                 SendData("cmd: ");
                 string InFull = GetInput();
-                if (InFull == null) break;
                 string[] InCmd = InFull.Split(' ');
                 switch (InCmd[0].ToUpper())
                 {
@@ -352,20 +361,30 @@ namespace MiniGate
                         }
                         break;
                     case "MYCALL":
-                        if (InCmd.Length > 1)
+                        if (InCmd.Length == 2)
                         {
                             ChangeCall(InCmd[1]);
                             break;
                         }
-                        SendData(MiniGate.FullCall + "\r\n");
+                        if (InCmd.Length == 1)
+                        {
+                            SendData(MiniGate.FullCall + "\r\n");
+                            break;
+                        }
+                        SendData("?\r\n");
                         break;
                     case "APRSSRV":
-                        if (InCmd.Length > 1)
+                        if (InCmd.Length == 2)
                         {
                             ChangeAPRSSrv(InCmd[1]);
                             break;
                         }
-                        SendData(APRSIS.Server + ":" + APRSIS.Port + "\r\n");
+                        if (InCmd.Length == 1)
+                        {
+                            SendData(APRSIS.Server + ":" + APRSIS.Port + "\r\n");
+                            break;
+                        }
+                        SendData("?\r\n");
                         break;
                     case "APRSPASS":
                         if (InCmd.Length == 2)
@@ -376,7 +395,8 @@ namespace MiniGate
                                 Config.Write("aprsis.pass", InCmd[1]);
                                 break;
                             }
-                            catch { }
+                            catch   // User must not have entered an integer
+                            { }
                         }
                         if (InCmd.Length == 1)
                         {
@@ -386,13 +406,41 @@ namespace MiniGate
                         SendData("?\r\n");
                         break;
                     case "DHCP":
-
+                        break;
                     case "MYIP":
-
+                        SendData("IP: " + MiniGate.eth[0].IPAddress + "\r\n" +
+                                 "GW: " + MiniGate.eth[0].GatewayAddress + "\r\n" +
+                                 "SN: " + MiniGate.eth[0].SubnetMask + "\r\n");
+                        break;
                     case "DNSSRV":
-
+                        for (int i = 0; i < MiniGate.eth[0].DnsAddresses.Length; i++)
+                        {
+                            SendData(MiniGate.eth[0].DnsAddresses[i] + "\r\n");
+                        }
+                        break;
+                    case "TXD":
                     case "TXDELAY":
-                        
+                        if (InCmd.Length == 2)
+                        {
+                            try
+                            {
+                                Packet.TXDelay = int.Parse(InCmd[1]);
+                                Config.Write("stn.txdelay", InCmd[1]);
+                                break;
+                            }
+                            catch       // User must not have entered an integer
+                            {
+                                SendData("?\r\n");
+                                break;
+                            }
+                        }
+                        if (InCmd.Length == 1)
+                        {
+                            SendData(Packet.TXDelay.ToString() + "\r\n");
+                            break;
+                        }
+                        SendData("?\r\n");
+                        break;
                     case "PASSWD":
                         if (InCmd.Length > 1)
                         {
@@ -400,7 +448,7 @@ namespace MiniGate
                             TelnetServer.Pass = InFull.Substring(InCmd[0].Length + 1);
                             break;
                         }
-                        SendData("?\r\n");
+                        SendData("?\r\n");  // We're not gonna tell you the password...
                         break;
                     case "BTEXT":
                         if (InCmd.Length > 1)
@@ -421,8 +469,11 @@ namespace MiniGate
                                 Config.Write("stn.binterval", InCmd[1]);
                                 break;
                             }
-                            catch
-                            {}
+                            catch   // User must not have entered an integer
+                            {
+                                SendData("?\r\n");
+                                break;
+                            }
                         }
                         if (InCmd.Length == 1)
                         {
@@ -432,6 +483,7 @@ namespace MiniGate
                         SendData("?\r\n");
                         break;
                     case "PATH":
+                        break;
                     default:
                         SendData("?\r\n");
                         break;
@@ -543,21 +595,25 @@ namespace MiniGate
                     {
                         EndPoint APRSISServer = new IPEndPoint(Dns.GetHostEntry(Server).AddressList[0], Port);
                         Connection = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+                        Connection.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.NoDelay, true);
                         Connection.Connect(APRSISServer);
-                        if (IsConnected()) Debug.Print("Connected!");
                         Thread.Sleep(500);
-                        SendData("user " + MiniGate.FullCall + " pass " + Pass + " vers MiniGate " + MiniGate.MiniGateVer + "\r\n");
-                        Thread keepalive = new Thread(new ThreadStart(Monitor));
-                        keepalive.Start();
-                        Thread.Sleep(500);
-                        Beacon.SendISBeacon();
-                        LEDControl.errors--;    // Clear the error we set earlier
+                        if (IsConnected())
+                        {
+                            Debug.Print("Connected!");
+                            SendData("user " + MiniGate.FullCall + " pass " + Pass + " vers MiniGate " + MiniGate.MiniGateVer + "\r\n");
+                            Thread keepalive = new Thread(new ThreadStart(Monitor));
+                            keepalive.Start();
+                            Thread.Sleep(500);
+                            Beacon.SendISBeacon();
+                        }
                     }
                     catch
                     {
                         Debug.Print("Exception @ Making connection");
                         Thread.Sleep(10000);    // Don't get caught in a tight loop if we can't connect
                     }
+                    LEDControl.errors--;    // Clear the error we set earlier
                     while (IsConnected())
                     {
                         InData = GetInput();
@@ -583,7 +639,7 @@ namespace MiniGate
             if (Connection == null) return false;
             try
             {
-                return !(Connection.Poll(100, SelectMode.SelectRead) && (Connection.Available == 0));
+                return !(Connection.Poll(10, SelectMode.SelectRead) && (Connection.Available == 0));
             }
             catch
             {
@@ -612,12 +668,20 @@ namespace MiniGate
             }
             try
             {
-                Connection.Poll(-1, SelectMode.SelectRead);     // Wait until there's data to read
-                byte[] RXData = new byte[Connection.Available];
-                Connection.Receive(RXData);
-                Debug.Print("IN: " + new String(Toolbox.Bytes2Chars(RXData)).Trim());    // TODO: Remove after testing
-                KeepAlive = 0;      // Clear KeepAlive watchdog
-                return new String(Toolbox.Bytes2Chars(RXData)).Trim();       // TODO: Replace try/catch with real input validation
+                string RXString = string.Empty;
+                while (true)
+                {
+                    Connection.Poll(-1, SelectMode.SelectRead);     // Wait until there's data to read
+                    byte[] RXData = new byte[Connection.Available];
+                    Connection.Receive(RXData);
+                    RXString += new string(Toolbox.Bytes2Chars(RXData));
+                    KeepAlive = 0;      // Clear KeepAlive watchdog
+                    if (RXData[RXData.Length - 2] == 13 && RXData[RXData.Length - 1] == 10)     // Wait for a CRLF
+                    {
+                        Debug.Print("IN: " + RXString.Trim());    // TODO: Remove after testing
+                        return RXString.Trim();       // TODO: Replace try/catch with real input validation
+                    }
+                }
             }
             catch (SocketException e)
             {
