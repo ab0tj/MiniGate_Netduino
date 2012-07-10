@@ -21,6 +21,8 @@ namespace MiniGate
         public static int SSID = 0;
         public static string FullCall;
         public static NetworkInterface[] eth;
+        static OutputPort arefSelect = new OutputPort((Cpu.Pin)56, false); // Use external aref
+        public static SecretLabs.NETMF.Hardware.AnalogInput Vin = new SecretLabs.NETMF.Hardware.AnalogInput(Pins.GPIO_PIN_A0);
 
         public static void Main()
         {
@@ -37,6 +39,8 @@ namespace MiniGate
             catch { }
             if (SSID != 0) FullCall += "-" + SSID.ToString();
             Packet.OpenPort();
+            Thread wdt = new Thread(new ThreadStart(WatchDogTimer));
+            wdt.Start();
             eth = NetworkInterface.GetAllNetworkInterfaces();
             Debug.Print("IP: " + eth[0].IPAddress);     // TODO: Remove for final version
             Thread telnet = new Thread(new ThreadStart(TelnetServer.Main));
@@ -47,6 +51,15 @@ namespace MiniGate
             beacon.Start();
             LEDControl.errors--;    // Clear the boot error
             Thread.Sleep(Timeout.Infinite);
+        }
+
+        static void WatchDogTimer()
+        {
+            while (true)
+            {
+                Packet.modem.Write(new byte[] { 0x1B, 0x16 }, 0, 2);
+                Thread.Sleep(10000);
+            }
         }
     }
 
@@ -88,7 +101,7 @@ namespace MiniGate
 
     public class Packet
     {
-        static SerialPort modem = new SerialPort("COM2", 9600, Parity.None, 8, StopBits.One);
+        public static SerialPort modem = new SerialPort("COM2", 9600, Parity.None, 8, StopBits.One);
         static int bytes = 0;
         public static int TXDelay = 20;
         static byte[] indata = new byte[1024];
@@ -716,7 +729,7 @@ namespace MiniGate
 
         public static void SendISBeacon()
         {
-            APRSIS.SendData(MiniGate.FullCall + ">" + MiniGate.MiniGateDest + ",TCPIP*:" + BText + "\r\n");
+            APRSIS.SendData(MiniGate.FullCall + ">" + MiniGate.MiniGateDest + ",TCPIP*:" + BText + " " + Toolbox.GetVin() + "\r\n");
         }
     }
 
@@ -736,6 +749,15 @@ namespace MiniGate
             for (int Counter = 0; Counter < Input.Length; ++Counter)
                 Output[Counter] = (byte)Input[Counter];
             return Output;
+        }
+
+        public static string GetVin()
+        {
+            while (true)
+            {
+                float volts = MiniGate.Vin.Read() * (float)0.02543;
+                return volts.ToString("N2") + "v";
+            }
         }
     }
 }
