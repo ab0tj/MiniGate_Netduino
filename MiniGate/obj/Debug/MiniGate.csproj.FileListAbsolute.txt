@@ -28,3 +28,44 @@ C:\Users\Alex\documents\visual studio 2010\Projects\MiniGate\MiniGate\obj\Debug\
 C:\Users\Alex\documents\visual studio 2010\Projects\MiniGate\MiniGate\obj\Debug\le\MiniGate.pdbx
 C:\Users\Alex\documents\visual studio 2010\Projects\MiniGate\MiniGate\obj\Debug\MiniGate.exe
 C:\Users\Alex\documents\visual studio 2010\Projects\MiniGate\MiniGate\obj\Debug\MiniGate.pdb
+\\moo\Stuff\Programming\c#\MiniGate\MiniGate\obj\Debug\TinyCLR_DebugReferences.cache
+\\moo\Stuff\Programming\c#\MiniGate\MiniGate\obj\Debug\MiniGate.exe
+\\moo\Stuff\Programming\c#\MiniGate\MiniGate\obj\Debug\MiniGate.pdb
+\\moo\Stuff\Programming\c#\MiniGate\MiniGate\bin\Debug\le\MiniGate.exe
+\\moo\Stuff\Programming\c#\MiniGate\MiniGate\bin\Debug\be\MiniGate.exe
+\\moo\Stuff\Programming\c#\MiniGate\MiniGate\bin\Debug\le\MiniGate.pdb
+\\moo\Stuff\Programming\c#\MiniGate\MiniGate\bin\Debug\be\MiniGate.pdb
+\\moo\Stuff\Programming\c#\MiniGate\MiniGate\bin\Debug\MiniGate.exe
+\\moo\Stuff\Programming\c#\MiniGate\MiniGate\bin\Debug\MiniGate.pdb
+\\moo\Stuff\Programming\c#\MiniGate\MiniGate\bin\Debug\le\MiniGate.pe
+\\moo\Stuff\Programming\c#\MiniGate\MiniGate\bin\Debug\le\MiniGate.pdbx
+\\moo\Stuff\Programming\c#\MiniGate\MiniGate\bin\Debug\be\MiniGate.pe
+\\moo\Stuff\Programming\c#\MiniGate\MiniGate\bin\Debug\be\MiniGate.pdbx
+\\moo\Stuff\Programming\c#\MiniGate\MiniGate\bin\Debug\LE\SecretLabs.NETMF.Hardware.pe
+\\moo\Stuff\Programming\c#\MiniGate\MiniGate\bin\Debug\LE\SecretLabs.NETMF.Hardware.NetduinoPlus.pe
+\\moo\Stuff\Programming\c#\MiniGate\MiniGate\bin\Debug\LE\SecretLabs.NETMF.Hardware.Netduino.pe
+\\moo\Stuff\Programming\c#\MiniGate\MiniGate\bin\Debug\BE\SecretLabs.NETMF.Hardware.pe
+\\moo\Stuff\Programming\c#\MiniGate\MiniGate\bin\Debug\BE\SecretLabs.NETMF.Hardware.NetduinoPlus.pe
+\\moo\Stuff\Programming\c#\MiniGate\MiniGate\bin\Debug\BE\SecretLabs.NETMF.Hardware.Netduino.pe
+\\moo\Stuff\Programming\c#\MiniGate\MiniGate\bin\Debug\LE\SecretLabs.NETMF.Hardware.pdbx
+\\moo\Stuff\Programming\c#\MiniGate\MiniGate\bin\Debug\LE\SecretLabs.NETMF.Hardware.NetduinoPlus.pdbx
+\\moo\Stuff\Programming\c#\MiniGate\MiniGate\bin\Debug\LE\SecretLabs.NETMF.Hardware.Netduino.pdbx
+\\moo\Stuff\Programming\c#\MiniGate\MiniGate\bin\Debug\BE\SecretLabs.NETMF.Hardware.pdbx
+\\moo\Stuff\Programming\c#\MiniGate\MiniGate\bin\Debug\BE\SecretLabs.NETMF.Hardware.NetduinoPlus.pdbx
+\\moo\Stuff\Programming\c#\MiniGate\MiniGate\bin\Debug\BE\SecretLabs.NETMF.Hardware.Netduino.pdbx
+\\moo\Stuff\Programming\c#\MiniGate\MiniGate\bin\Debug\SecretLabs.NETMF.Hardware.dll
+\\moo\Stuff\Programming\c#\MiniGate\MiniGate\bin\Debug\SecretLabs.NETMF.Hardware.NetduinoPlus.dll
+\\moo\Stuff\Programming\c#\MiniGate\MiniGate\bin\Debug\SecretLabs.NETMF.Hardware.Netduino.dll
+\\moo\Stuff\Programming\c#\MiniGate\MiniGate\bin\Debug\SecretLabs.NETMF.Hardware.pdb
+\\moo\Stuff\Programming\c#\MiniGate\MiniGate\bin\Debug\SecretLabs.NETMF.Hardware.NetduinoPlus.pdb
+\\moo\Stuff\Programming\c#\MiniGate\MiniGate\bin\Debug\SecretLabs.NETMF.Hardware.Netduino.pdb
+\\moo\Stuff\Programming\c#\MiniGate\MiniGate\obj\Debug\be\MiniGate.pe
+\\moo\Stuff\Programming\c#\MiniGate\MiniGate\obj\Debug\be\MiniGate.pdbx
+\\moo\Stuff\Programming\c#\MiniGate\MiniGate\obj\Debug\le\MiniGate.pe
+\\moo\Stuff\Programming\c#\MiniGate\MiniGate\obj\Debug\le\MiniGate.pdbx
+\\moo\Stuff\Programming\c#\MiniGate\MiniGate\bin\Debug\LE\SecretLabs.NETMF.Hardware.AnalogInput.pe
+\\moo\Stuff\Programming\c#\MiniGate\MiniGate\bin\Debug\BE\SecretLabs.NETMF.Hardware.AnalogInput.pe
+\\moo\Stuff\Programming\c#\MiniGate\MiniGate\bin\Debug\LE\SecretLabs.NETMF.Hardware.AnalogInput.pdbx
+\\moo\Stuff\Programming\c#\MiniGate\MiniGate\bin\Debug\BE\SecretLabs.NETMF.Hardware.AnalogInput.pdbx
+\\moo\Stuff\Programming\c#\MiniGate\MiniGate\bin\Debug\SecretLabs.NETMF.Hardware.AnalogInput.dll
+\\moo\Stuff\Programming\c#\MiniGate\MiniGate\bin\Debug\SecretLabs.NETMF.Hardware.AnalogInput.pdb

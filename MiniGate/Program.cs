@@ -360,7 +360,30 @@ namespace MiniGate
                     case "EXIT":
                         return;
                     case "DISP":
-                        // Display code goes here
+                        string Mon = "";
+                        if (RFMonEnable)
+                        {
+                            Mon = "ON";
+                        }
+                        else
+                        {
+                            Mon = "OFF";
+                        }
+                        SendData("MONITOR: " + Mon + "\r\n");
+                        SendData("MYCALL: " + MiniGate.FullCall + "\r\n");
+                        SendData("APRSSRV: " + APRSIS.Server + ":" + APRSIS.Port + "\r\n");
+                        SendData("APRSPASS: " + APRSIS.Pass + "\r\n");
+                        SendData("MYIP: " + MiniGate.eth[0].IPAddress +
+                                 " GW: " + MiniGate.eth[0].GatewayAddress +
+                                 " SN: " + MiniGate.eth[0].SubnetMask + "\r\n");
+                        SendData("DNSSRV: ");
+                        for (int i = 0; i < MiniGate.eth[0].DnsAddresses.Length; i++)
+                        {
+                            SendData(MiniGate.eth[0].DnsAddresses[i] + "\r\n");
+                        }
+                        SendData("TXDELAY: " + Packet.TXDelay.ToString() + "\r\n");
+                        SendData("BTEXT: " + Beacon.BText + "\r\n");
+                        SendData("BINTERVAL: " + Beacon.Interval.ToString() + "\r\n");
                         break;
                     case "MON":
                     case "MONITOR":
@@ -413,7 +436,7 @@ namespace MiniGate
                         }
                         if (InCmd.Length == 1)
                         {
-                            SendData(APRSIS.Pass + "\r\n");
+                            
                             break;
                         }
                         SendData("?\r\n");
@@ -496,6 +519,9 @@ namespace MiniGate
                         SendData("?\r\n");
                         break;
                     case "PATH":
+                        break;
+                    case "VOLT":
+                        SendData(Toolbox.GetVin() + "\r\n");
                         break;
                     default:
                         SendData("?\r\n");
@@ -755,7 +781,7 @@ namespace MiniGate
         {
             while (true)
             {
-                float volts = MiniGate.Vin.Read() * (float)0.02543;
+                double volts = MiniGate.Vin.Read() * 0.02543;
                 return volts.ToString("N2") + "v";
             }
         }
