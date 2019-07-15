@@ -1,5 +1,7 @@
 MiniGate
 
+*** This is old code that was never finished. You should not use it. I only left it here for posterity ***
+
 An APRS IGate and digipeater for the Netduino Plus. Built with low power and small size as a goal. Designed for use with a SmartModem "shield". See https://github.com/ab0tj/SmartModem
 
 Currently implemented features (still under construction!):
